@@ -1,9 +1,10 @@
 import streamlit as st
 from datetime import date
 import csv, os
+import pandas as pd  # 관리자 조회용
 
 # =========================
-# 기본 페이지(브랜딩)
+# 기본 페이지(브랜딩/보안)
 # =========================
 st.set_page_config(
     page_title="광명파트너스 | 정책자금 맞춤 도우미",
@@ -14,6 +15,9 @@ st.set_page_config(
 BRAND = "광명파트너스"
 BLOG_URL = "https://blog.naver.com/kwangmyung80"
 CONTACT_PHONE = "1877-2312"  # 대표번호
+
+# 🔒 관리자 PIN (원하는 숫자로 변경하세요)
+ADMIN_PIN = "1234"
 
 # =========================
 # 스타일
@@ -36,7 +40,7 @@ hr.soft {border:none; border-top:1px dashed #e5e7eb; margin:10px 0;}
 """, unsafe_allow_html=True)
 
 # =========================
-# 사이드바 (연락처/블로그만 노출)
+# 사이드바
 # =========================
 with st.sidebar:
     st.markdown("### 🧭 사용 방법")
@@ -80,6 +84,25 @@ def build_date_or_error(year: int, month: int, day: int, label: str):
         return date(year, month, day), None
     except Exception:
         return None, f"{label}: 올바르지 않은 날짜입니다."
+
+CONTACTS_CSV = "contacts.csv"
+
+def append_contact_csv(name, phone, memo):
+    file_exists = os.path.isfile(CONTACTS_CSV)
+    with open(CONTACTS_CSV, "a", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        if not file_exists:
+            writer.writerow(["이름", "연락처", "메모", "신청일"])
+        writer.writerow([name, phone, memo, date.today().isoformat()])
+
+def load_contacts_df():
+    if os.path.isfile(CONTACTS_CSV):
+        try:
+            df = pd.read_csv(CONTACTS_CSV, encoding="utf-8")
+        except Exception:
+            df = pd.read_csv(CONTACTS_CSV, encoding="cp949")
+        return df
+    return pd.DataFrame(columns=["이름", "연락처", "메모", "신청일"])
 
 # =========================
 # 입력 폼
@@ -172,13 +195,11 @@ if submitted:
     birth, err1 = build_date_or_error(int(birth_year), int(birth_month), int(birth_day), "대표자 생년월일")
     biz_start, err2 = build_date_or_error(int(biz_year), int(biz_month), int(biz_day), "개업 연월일")
 
-    # 에러 표시
     if err1: st.error(err1)
     if err2: st.error(err2)
 
     # -------- 분석 결과/안내 : 날짜가 정상일 때만 노출 --------
     if not (err1 or err2):
-        # 입력 요약
         st.markdown('<div class="card">', unsafe_allow_html=True)
         st.markdown("#### 🧾 입력 요약")
         csum1, csum2, csum3 = st.columns([1,1,1])
@@ -197,20 +218,11 @@ if submitted:
         st.markdown('</div>', unsafe_allow_html=True)
 
         st.markdown("### 🔎 분석 결과")
-
-        # 파생값
         age = int(years_between(birth))
         biz_months = months_between(biz_start)
 
         results = []
-
-        # ---------------- 최소 게이트 ----------------
-        # - 연 매출 1,000만원 미만 → 결과 없음
-        # - 신용(NICE 515 이하 또는 KCB 454 이하) → 결과 없음
-        # - 개업 3개월 미만 → 결과 없음
         if (sales >= 10_000_000) and (credit_nice > 515) and (credit_kcb > 454) and (biz_months >= 3):
-
-            # 1) 일반경영안정자금 : 신용 기준
             if (credit_nice >= 665) and (credit_kcb >= 630):
                 results.append({
                     "name": "일반경영안정자금",
@@ -219,8 +231,6 @@ if submitted:
                     "notes": "은행 및 보증 조건에 따라 실금리는 달라질 수 있습니다.",
                     "link": "https://ols.sbiz.or.kr/"
                 })
-
-            # 2) 신용취약 소상공인자금 : 신용 구간 충족
             if (515 <= credit_nice <= 839) or (515 <= credit_kcb <= 839):
                 results.append({
                     "name": "신용취약 소상공인자금",
@@ -229,8 +239,6 @@ if submitted:
                     "notes": "신용관리교육 필수. 세부 한도/조건은 심사에 따라 달라집니다.",
                     "link": "https://ols.sbiz.or.kr/"
                 })
-
-            # 3) 청년 전용 자금(고용연계/창업 등)
             if age <= 39 and (credit_nice >= 620 and credit_kcb >= 620):
                 results.append({
                     "name": "청년 전용 자금(공고별)",
@@ -239,8 +247,6 @@ if submitted:
                     "notes": "세부요건·금리는 공고마다 상이합니다.",
                     "link": "https://www.kosmes.or.kr/"
                 })
-
-            # 4) 혁신성장촉진자금 (혁신형/일반형)
             if any([flag_export, flag_growth10, flag_smart_factory, flag_strong_local, flag_postgrad,
                     flag_smart_tech, flag_baeknyeon, flag_social, flag_academy]):
                 results.append({
@@ -250,8 +256,6 @@ if submitted:
                     "notes": "혁신형/일반형 증빙 필요. 금리는 유형·공고에 따라 달라질 수 있습니다.",
                     "link": "https://www.sbiz24.kr/"
                 })
-
-            # 5) 일시적 경영애로자금 : 사유 체크 시만 노출
             if flag_distress:
                 results.append({
                     "name": "일시적 경영애로자금",
@@ -261,8 +265,7 @@ if submitted:
                     "link": "https://ols.sbiz.or.kr/"
                 })
 
-        # ---------------- 결과 출력 ----------------
-        if 'results' in locals() and results:
+        if results:
             for r in results:
                 st.markdown(f"""<div class="result-card">
                     <div style='display:flex;justify-content:space-between;align-items:center;'>
@@ -277,21 +280,20 @@ if submitted:
                         👉 <a href="{r.get('link','')}" target="_blank">신청 안내 바로가기</a>
                     </div>
                 </div>""", unsafe_allow_html=True)
-        elif submitted and not (err1 or err2):
-            # 게이트 미충족 또는 조건 미적합
-            msg = []
-            if sales < 10_000_000:
-                msg.append("연 매출 1,000만원 미만")
-            if credit_nice <= 515 or credit_kcb <= 454:
-                msg.append("신용점수 낮음(NICE 515 이하 또는 KCB 454 이하)")
-            if months_between(biz_start) < 3:
-                msg.append("개업 3개월 미만")
-            if msg:
-                st.info("현재 조건에 맞는 자금을 찾지 못했습니다. " + " · ".join(msg))
-            else:
-                st.info("현재 조건에 맞는 자금을 찾지 못했습니다.")
+        else:
+            if not (err1 or err2):
+                msg = []
+                if sales < 10_000_000:
+                    msg.append("연 매출 1,000만원 미만")
+                if credit_nice <= 515 or credit_kcb <= 454:
+                    msg.append("신용점수 낮음(NICE 515 이하 또는 KCB 454 이하)")
+                if months_between(biz_start) < 3:
+                    msg.append("개업 3개월 미만")
+                if msg:
+                    st.info("현재 조건에 맞는 자금을 찾지 못했습니다. " + " · ".join(msg))
+                else:
+                    st.info("현재 조건에 맞는 자금을 찾지 못했습니다.")
 
-        # ---------------- 안내(파란박스) ----------------
         st.markdown("""
 <div style="
     border-left:6px solid #1f6feb;
@@ -319,19 +321,43 @@ if submitted:
         if not name or not phone:
             st.error("이름과 연락처는 필수 입력입니다.")
         else:
-            file_exists = os.path.isfile("contacts.csv")
-            with open("contacts.csv", "a", newline="", encoding="utf-8") as f:
-                writer = csv.writer(f)
-                if not file_exists:
-                    writer.writerow(["이름", "연락처", "메모", "신청일"])
-                writer.writerow([name, phone, memo, date.today().isoformat()])
+            append_contact_csv(name, phone, memo)
             st.success("✅ 상담 신청이 접수되었습니다. 곧 연락드리겠습니다.")
 
-    # -------- 하단 상담/문의(간단 노출) --------
     st.markdown("---")
     st.subheader("📞 상담 및 문의 채널")
     st.markdown(f"- 대표번호: **{CONTACT_PHONE}**")
     st.markdown(f"- 블로그: [광명파트너스 네이버 블로그]({BLOG_URL})")
+
+# =========================
+# 🔒 관리자 전용 페이지 (앱 내 조회)
+# =========================
+st.markdown("---")
+with st.expander("🔒 관리자 전용 (상담 신청 내역 조회/다운로드)"):
+    pin = st.text_input("관리자 PIN을 입력하세요", type="password")
+    if pin == ADMIN_PIN:
+        st.success("관리자 인증 완료 ✅")
+        df = load_contacts_df()
+        st.markdown("#### 상담 신청 내역")
+        st.dataframe(df, use_container_width=True)
+
+        # 다운로드 버튼
+        csv_bytes = df.to_csv(index=False, encoding="utf-8-sig").encode("utf-8-sig")
+        st.download_button(
+            label="⬇️ CSV 다운로드",
+            data=csv_bytes,
+            file_name="contacts.csv",
+            mime="text/csv"
+        )
+
+        # (선택) 위험 방지용 삭제 옵션 - 기본 주석
+        # with st.popover("⚠️ 데이터 비우기(위험)"):
+        #     confirm = st.checkbox("정말로 contacts.csv를 초기화합니다.")
+        #     if confirm and st.button("초기화 실행"):
+        #         open(CONTACTS_CSV, "w", encoding="utf-8").write("")
+        #         st.warning("CSV가 초기화되었습니다. 새로고침 후 반영됩니다.")
+    elif pin:
+        st.error("PIN이 올바르지 않습니다.")
 
 # 푸터
 st.caption(f"ⓒ {date.today().year} {BRAND}")
