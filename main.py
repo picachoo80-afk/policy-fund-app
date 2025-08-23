@@ -36,7 +36,7 @@ hr.soft {border:none; border-top:1px dashed #e5e7eb; margin:10px 0;}
 """, unsafe_allow_html=True)
 
 # =========================
-# 사이드바
+# 사이드바 (연락처/블로그만 노출)
 # =========================
 with st.sidebar:
     st.markdown("### 🧭 사용 방법")
@@ -55,7 +55,7 @@ with st.sidebar:
 # =========================
 st.markdown("## 📊 광명파트너스 – 정책자금 맞춤 도우미")
 st.caption("정부 정책자금 진단 및 상담 연계 서비스")
-st.markdown(f"📞 대표번호: **1877-2312**  ·  🔗 블로그: [바로가기]({BLOG_URL})")
+st.markdown(f"📞 대표번호: **{CONTACT_PHONE}**  ·  🔗 블로그: [바로가기]({BLOG_URL})")
 st.markdown("---")
 
 # =========================
@@ -166,7 +166,7 @@ with st.form("basic_form", clear_on_submit=False):
     submitted = st.form_submit_button("✅ ③ 제출하고 분석 결과 보기")
 
 # =========================
-# 제출 처리/분석
+# 제출 처리/분석 + 상담 폼(항상 노출)
 # =========================
 if submitted:
     birth, err1 = build_date_or_error(int(birth_year), int(birth_month), int(birth_day), "대표자 생년월일")
@@ -176,6 +176,7 @@ if submitted:
     if err1: st.error(err1)
     if err2: st.error(err2)
 
+    # -------- 분석 결과/안내 : 날짜가 정상일 때만 노출 --------
     if not (err1 or err2):
         # 입력 요약
         st.markdown('<div class="card">', unsafe_allow_html=True)
@@ -209,7 +210,7 @@ if submitted:
         # - 개업 3개월 미만 → 결과 없음
         if (sales >= 10_000_000) and (credit_nice > 515) and (credit_kcb > 454) and (biz_months >= 3):
 
-            # 1) 일반경영안정자금 : 신용 기준만 반영
+            # 1) 일반경영안정자금 : 신용 기준
             if (credit_nice >= 665) and (credit_kcb >= 630):
                 results.append({
                     "name": "일반경영안정자금",
@@ -229,7 +230,7 @@ if submitted:
                     "link": "https://ols.sbiz.or.kr/"
                 })
 
-            # 3) 청년 전용 자금(고용연계/창업 등) : 업력 조건 삭제(전역 게이트 3개월만 유지)
+            # 3) 청년 전용 자금(고용연계/창업 등)
             if age <= 39 and (credit_nice >= 620 and credit_kcb >= 620):
                 results.append({
                     "name": "청년 전용 자금(공고별)",
@@ -261,7 +262,7 @@ if submitted:
                 })
 
         # ---------------- 결과 출력 ----------------
-        if results:
+        if 'results' in locals() and results:
             for r in results:
                 st.markdown(f"""<div class="result-card">
                     <div style='display:flex;justify-content:space-between;align-items:center;'>
@@ -276,8 +277,8 @@ if submitted:
                         👉 <a href="{r.get('link','')}" target="_blank">신청 안내 바로가기</a>
                     </div>
                 </div>""", unsafe_allow_html=True)
-        else:
-            # 게이트 미충족이거나 조건 미적합
+        elif submitted and not (err1 or err2):
+            # 게이트 미충족 또는 조건 미적합
             msg = []
             if sales < 10_000_000:
                 msg.append("연 매출 1,000만원 미만")
@@ -305,35 +306,32 @@ if submitted:
 </div>
 """, unsafe_allow_html=True)
 
-        # ---------------- 상담 신청(연락처 수집 / CSV 저장) ----------------
-        st.markdown("### 📞 상담 신청하기")
-        st.caption("정확한 심사 가능 여부와 맞춤 전략은 상담을 통해 확인할 수 있습니다.")
-        with st.form("contact_form", clear_on_submit=True):
-            name = st.text_input("이름")
-            phone = st.text_input("연락처 (휴대폰 번호)")
-            memo = st.text_area("추가 메모 (선택)")
-            submit_contact = st.form_submit_button("📩 상담 신청하기")
+    # -------- 상담 신청 폼 : 제출만 하면 항상 노출 --------
+    st.markdown("### 📞 상담 신청하기")
+    st.caption("정확한 심사 가능 여부와 맞춤 전략은 상담을 통해 확인할 수 있습니다.")
+    with st.form("contact_form", clear_on_submit=True):
+        name = st.text_input("이름")
+        phone = st.text_input("연락처 (휴대폰 번호)")
+        memo = st.text_area("추가 메모 (선택)")
+        submit_contact = st.form_submit_button("📩 상담 신청하기")
 
-        if submit_contact:
-            if not name or not phone:
-                st.error("이름과 연락처는 필수 입력입니다.")
-            else:
-                file_exists = os.path.isfile("contacts.csv")
-                with open("contacts.csv", "a", newline="", encoding="utf-8") as f:
-                    writer = csv.writer(f)
-                    if not file_exists:
-                        writer.writerow(["이름", "연락처", "메모", "신청일"])
-                    writer.writerow([name, phone, memo, date.today().isoformat()])
-                st.success("✅ 상담 신청이 접수되었습니다. 곧 연락드리겠습니다.")
+    if submit_contact:
+        if not name or not phone:
+            st.error("이름과 연락처는 필수 입력입니다.")
+        else:
+            file_exists = os.path.isfile("contacts.csv")
+            with open("contacts.csv", "a", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                if not file_exists:
+                    writer.writerow(["이름", "연락처", "메모", "신청일"])
+                writer.writerow([name, phone, memo, date.today().isoformat()])
+            st.success("✅ 상담 신청이 접수되었습니다. 곧 연락드리겠습니다.")
 
-        # ---------------- 하단 상담/문의(간단 노출) ----------------
-        st.markdown("---")
-        st.subheader("📞 상담 및 문의 채널")
-        st.markdown("- 대표번호: **1877-2312**")
-        st.markdown("- 카카오채널: [바로 연결하기](https://open.kakao.com/o/shxgLPsh)")
-        st.markdown("- 블로그: [광명파트너스 네이버 블로그](https://blog.naver.com/kwangmyung80)")
-
+    # -------- 하단 상담/문의(간단 노출) --------
+    st.markdown("---")
+    st.subheader("📞 상담 및 문의 채널")
+    st.markdown(f"- 대표번호: **{CONTACT_PHONE}**")
+    st.markdown(f"- 블로그: [광명파트너스 네이버 블로그]({BLOG_URL})")
 
 # 푸터
 st.caption(f"ⓒ {date.today().year} {BRAND}")
-
