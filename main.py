@@ -1,7 +1,8 @@
 import streamlit as st
 from datetime import date
-import csv, os
-import pandas as pd  # 관리자 조회용
+import os
+from pathlib import Path
+import pandas as pd
 
 # =========================
 # 기본 페이지(브랜딩/보안)
@@ -14,10 +15,8 @@ st.set_page_config(
 
 BRAND = "광명파트너스"
 BLOG_URL = "https://blog.naver.com/kwangmyung80"
-CONTACT_PHONE = "1877-2312"  # 대표번호
-
-# 🔒 관리자 PIN (원하는 숫자로 변경하세요)
-ADMIN_PIN = "0913"
+CONTACT_PHONE = "1877-2312"   # 대표번호
+ADMIN_PIN = "1234"            # 관리자 PIN
 
 # =========================
 # 스타일
@@ -25,12 +24,8 @@ ADMIN_PIN = "0913"
 st.markdown("""
 <style>
 .block-container {padding-top: 1.25rem; padding-bottom: 2rem;}
-.card {
-  border: 1px solid #e6e6e6; border-radius: 12px; padding: 16px 18px; margin-bottom: 14px; background: #fff;
-}
-.result-card{
-  border:1px solid #E5EAF2; border-radius:14px; padding:14px 16px; margin:10px 0; background:#F9FBFF;
-}
+.card { border: 1px solid #e6e6e6; border-radius: 12px; padding: 16px 18px; margin-bottom: 14px; background: #fff; }
+.result-card{ border:1px solid #E5EAF2; border-radius:14px; padding:14px 16px; margin:10px 0; background:#F9FBFF; }
 .badge {display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; font-weight:600; margin-left:6px;
   background:#EEF2FF; color:#334155; border:1px solid #E5E7EB;}
 .small {font-size: 13px; color:#6b7280;}
@@ -38,6 +33,15 @@ hr.soft {border:none; border-top:1px dashed #e5e7eb; margin:10px 0;}
 .sidebar-links a {display:block; margin:6px 0;}
 </style>
 """, unsafe_allow_html=True)
+
+# =========================
+# 경로/세션 준비
+# =========================
+APP_DIR = Path(__file__).parent if "__file__" in globals() else Path(".")
+CONTACTS_XLSX = APP_DIR / "contacts.xlsx"  # Excel 저장 파일
+
+if "contacts_buffer" not in st.session_state:
+    st.session_state.contacts_buffer = []  # 이번 세션에서 막 저장한 항목 미리보기
 
 # =========================
 # 사이드바
@@ -85,24 +89,33 @@ def build_date_or_error(year: int, month: int, day: int, label: str):
     except Exception:
         return None, f"{label}: 올바르지 않은 날짜입니다."
 
-CONTACTS_CSV = "contacts.csv"
-
-def append_contact_csv(name, phone, memo):
-    file_exists = os.path.isfile(CONTACTS_CSV)
-    with open(CONTACTS_CSV, "a", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f)
-        if not file_exists:
-            writer.writerow(["이름", "연락처", "메모", "신청일"])
-        writer.writerow([name, phone, memo, date.today().isoformat()])
-
-def load_contacts_df():
-    if os.path.isfile(CONTACTS_CSV):
+# =========================
+# Excel 저장/불러오기
+# =========================
+def ensure_df(schema: list[str]) -> pd.DataFrame:
+    if CONTACTS_XLSX.exists():
         try:
-            df = pd.read_csv(CONTACTS_CSV, encoding="utf-8")
+            df = pd.read_excel(CONTACTS_XLSX, engine="openpyxl")
+            # 누락 컬럼 보정
+            for c in schema:
+                if c not in df.columns:
+                    df[c] = ""
+            return df[schema]
         except Exception:
-            df = pd.read_csv(CONTACTS_CSV, encoding="cp949")
-        return df
-    return pd.DataFrame(columns=["이름", "연락처", "메모", "신청일"])
+            return pd.DataFrame(columns=schema)
+    else:
+        return pd.DataFrame(columns=schema)
+
+SCHEMA = ["이름", "연락처", "메모", "신청일"]
+
+def append_contact_xlsx(name: str, phone: str, memo: str):
+    df = ensure_df(SCHEMA)
+    new_row = {"이름": name, "연락처": phone, "메모": memo, "신청일": date.today().isoformat()}
+    df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+    df.to_excel(CONTACTS_XLSX, index=False, engine="openpyxl")
+
+def load_contacts_df() -> pd.DataFrame:
+    return ensure_df(SCHEMA)
 
 # =========================
 # 입력 폼
@@ -189,118 +202,100 @@ with st.form("basic_form", clear_on_submit=False):
     submitted = st.form_submit_button("✅ ③ 제출하고 분석 결과 보기")
 
 # =========================
-# 제출 처리/분석 + 상담 폼(항상 노출)
+# 제출 처리/분석 + 상담 폼
 # =========================
-if submitted:
-    birth, err1 = build_date_or_error(int(birth_year), int(birth_month), int(birth_day), "대표자 생년월일")
-    biz_start, err2 = build_date_or_error(int(biz_year), int(biz_month), int(biz_day), "개업 연월일")
+def show_results_and_notice(birth, biz_start):
+    # 입력 요약
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.markdown("#### 🧾 입력 요약")
+    csum1, csum2, csum3 = st.columns([1,1,1])
+    with csum1:
+        st.write(f"- 사업자 유형: **{biz_type}**")
+        st.write(f"- 지역: **{region}**")
+        st.write(f"- 업종/업태: **{biz_sector} / {biz_item}**")
+    with csum2:
+        st.write(f"- 대표자 생년월일: **{birth.isoformat()}**")
+        st.write(f"- 개업 연월일: **{biz_start.isoformat()}**")
+        st.write(f"- 직원 수: **{employees}명**")
+    with csum3:
+        st.write(f"- NICE/KCB: **{credit_nice} / {credit_kcb}**")
+        st.write(f"- 연 매출: **{fmt_money(sales)}원**")
+        st.write(f"- 대출/자산: **{fmt_money(loan_amount)}원 / {fmt_money(assets)}원**")
+    st.markdown('</div>', unsafe_allow_html=True)
 
-    if err1: st.error(err1)
-    if err2: st.error(err2)
+    # 간단 추천 로직
+    st.markdown("### 🔎 분석 결과")
+    age = int(years_between(birth))
+    biz_months = months_between(biz_start)
+    results = []
 
-    # -------- 분석 결과/안내 : 날짜가 정상일 때만 노출 --------
-    if not (err1 or err2):
-        st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.markdown("#### 🧾 입력 요약")
-        csum1, csum2, csum3 = st.columns([1,1,1])
-        with csum1:
-            st.write(f"- 사업자 유형: **{biz_type}**")
-            st.write(f"- 지역: **{region}**")
-            st.write(f"- 업종/업태: **{biz_sector} / {biz_item}**")
-        with csum2:
-            st.write(f"- 대표자 생년월일: **{birth.isoformat()}**")
-            st.write(f"- 개업 연월일: **{biz_start.isoformat()}**")
-            st.write(f"- 직원 수: **{employees}명**")
-        with csum3:
-            st.write(f"- NICE/KCB: **{credit_nice} / {credit_kcb}**")
-            st.write(f"- 연 매출: **{fmt_money(sales)}원**")
-            st.write(f"- 대출/자산: **{fmt_money(loan_amount)}원 / {fmt_money(assets)}원**")
-        st.markdown('</div>', unsafe_allow_html=True)
+    if (sales >= 10_000_000) and (credit_nice > 515) and (credit_kcb > 454) and (biz_months >= 3):
+        if (credit_nice >= 665) and (credit_kcb >= 630):
+            results.append({
+                "name": "일반경영안정자금",
+                "range": "2,000만원 ~ 7,000만원",
+                "rate": "연 3.28% (기준 2.68% +0.6%p)",
+                "notes": "은행 및 보증 조건에 따라 실금리는 달라질 수 있습니다.",
+                "link": "https://ols.sbiz.or.kr/"
+            })
+        if (515 <= credit_nice <= 839) or (515 <= credit_kcb <= 839):
+            results.append({
+                "name": "신용취약 소상공인자금",
+                "range": "최대 3,000만원 (연 1회)",
+                "rate": "연 4.28% (기준 2.68% +1.6%p)",
+                "notes": "신용관리교육 필수. 세부 한도/조건은 심사에 따라 달라집니다.",
+                "link": "https://ols.sbiz.or.kr/"
+            })
+        if age <= 39 and (credit_nice >= 620 and credit_kcb >= 620):
+            results.append({
+                "name": "청년 전용 자금(공고별)",
+                "range": "공고별 한도 (예: 1~2억원)",
+                "rate": "연 2.68% (기준 2.68% +0.0%p)",
+                "notes": "세부요건·금리는 공고마다 상이합니다.",
+                "link": "https://www.kosmes.or.kr/"
+            })
+        if any([flag_export, flag_growth10, flag_smart_factory, flag_strong_local, flag_postgrad,
+                flag_smart_tech, flag_baeknyeon, flag_social, flag_academy]):
+            results.append({
+                "name": "혁신성장촉진자금",
+                "range": "운전 2억원 / 시설 10억원 (예시)",
+                "rate": "연 3.08% (기준 2.68% +0.4%p)",
+                "notes": "혁신형/일반형 증빙 필요. 금리는 유형·공고에 따라 달라질 수 있습니다.",
+                "link": "https://www.sbiz24.kr/"
+            })
+        if flag_distress:
+            results.append({
+                "name": "일시적 경영애로자금",
+                "range": "최대 7,000만원",
+                "rate": "연 2.68% (기준 2.68% +0.0%p)",
+                "notes": "매출감소 등 일시적 애로 사유가 필요합니다.",
+                "link": "https://ols.sbiz.or.kr/"
+            })
 
-        st.markdown("### 🔎 분석 결과")
-        age = int(years_between(birth))
-        biz_months = months_between(biz_start)
+    if results:
+        for r in results:
+            st.markdown(f"""<div class="result-card">
+                <div style='display:flex;justify-content:space-between;align-items:center;'>
+                    <div style='font-size:16px; font-weight:800;'>{r['name']}</div>
+                    <span class="badge">분석</span>
+                </div>
+                <div class='small'>예상 한도: <b>{r['range']}</b></div>
+                <div class='small'>예상 금리: <b>{r['rate']}</b></div>
+                <hr class="soft" />
+                <div class='small'>{r['notes']}</div>
+                <div style='margin-top:6px;'>
+                    👉 <a href="{r.get('link','')}" target="_blank">신청 안내 바로가기</a>
+                </div>
+            </div>""", unsafe_allow_html=True)
+    else:
+        msg = []
+        if sales < 10_000_000: msg.append("연 매출 1,000만원 미만")
+        if credit_nice <= 515 or credit_kcb <= 454: msg.append("신용점수 낮음(NICE 515 이하 또는 KCB 454 이하)")
+        if months_between(biz_start) < 3: msg.append("개업 3개월 미만")
+        st.info("현재 조건에 맞는 자금을 찾지 못했습니다." + ("" if not msg else " " + " · ".join(msg)))
 
-        results = []
-        if (sales >= 10_000_000) and (credit_nice > 515) and (credit_kcb > 454) and (biz_months >= 3):
-            if (credit_nice >= 665) and (credit_kcb >= 630):
-                results.append({
-                    "name": "일반경영안정자금",
-                    "range": "2,000만원 ~ 7,000만원",
-                    "rate": "연 3.28% (기준 2.68% +0.6%p)",
-                    "notes": "은행 및 보증 조건에 따라 실금리는 달라질 수 있습니다.",
-                    "link": "https://ols.sbiz.or.kr/"
-                })
-            if (515 <= credit_nice <= 839) or (515 <= credit_kcb <= 839):
-                results.append({
-                    "name": "신용취약 소상공인자금",
-                    "range": "최대 3,000만원 (연 1회)",
-                    "rate": "연 4.28% (기준 2.68% +1.6%p)",
-                    "notes": "신용관리교육 필수. 세부 한도/조건은 심사에 따라 달라집니다.",
-                    "link": "https://ols.sbiz.or.kr/"
-                })
-            if age <= 39 and (credit_nice >= 620 and credit_kcb >= 620):
-                results.append({
-                    "name": "청년 전용 자금(공고별)",
-                    "range": "공고별 한도 (예: 1~2억원)",
-                    "rate": "연 2.68% (기준 2.68% +0.0%p)",
-                    "notes": "세부요건·금리는 공고마다 상이합니다.",
-                    "link": "https://www.kosmes.or.kr/"
-                })
-            if any([flag_export, flag_growth10, flag_smart_factory, flag_strong_local, flag_postgrad,
-                    flag_smart_tech, flag_baeknyeon, flag_social, flag_academy]):
-                results.append({
-                    "name": "혁신성장촉진자금",
-                    "range": "운전 2억원 / 시설 10억원 (예시)",
-                    "rate": "연 3.08% (기준 2.68% +0.4%p)",
-                    "notes": "혁신형/일반형 증빙 필요. 금리는 유형·공고에 따라 달라질 수 있습니다.",
-                    "link": "https://www.sbiz24.kr/"
-                })
-            if flag_distress:
-                results.append({
-                    "name": "일시적 경영애로자금",
-                    "range": "최대 7,000만원",
-                    "rate": "연 2.68% (기준 2.68% +0.0%p)",
-                    "notes": "매출감소 등 일시적 애로 사유가 필요합니다.",
-                    "link": "https://ols.sbiz.or.kr/"
-                })
-
-        if results:
-            for r in results:
-                st.markdown(f"""<div class="result-card">
-                    <div style='display:flex;justify-content:space-between;align-items:center;'>
-                        <div style='font-size:16px; font-weight:800;'>{r['name']}</div>
-                        <span class="badge">분석</span>
-                    </div>
-                    <div class='small'>예상 한도: <b>{r['range']}</b></div>
-                    <div class='small'>예상 금리: <b>{r['rate']}</b></div>
-                    <hr class="soft" />
-                    <div class='small'>{r['notes']}</div>
-                    <div style='margin-top:6px;'>
-                        👉 <a href="{r.get('link','')}" target="_blank">신청 안내 바로가기</a>
-                    </div>
-                </div>""", unsafe_allow_html=True)
-        else:
-            if not (err1 or err2):
-                msg = []
-                if sales < 10_000_000:
-                    msg.append("연 매출 1,000만원 미만")
-                if credit_nice <= 515 or credit_kcb <= 454:
-                    msg.append("신용점수 낮음(NICE 515 이하 또는 KCB 454 이하)")
-                if months_between(biz_start) < 3:
-                    msg.append("개업 3개월 미만")
-                if msg:
-                    st.info("현재 조건에 맞는 자금을 찾지 못했습니다. " + " · ".join(msg))
-                else:
-                    st.info("현재 조건에 맞는 자금을 찾지 못했습니다.")
-
-        st.markdown("""
-<div style="
-    border-left:6px solid #1f6feb;
-    background:#eaf2ff;
-    padding:14px 16px;
-    border-radius:8px;
-    margin: 12px 0 4px 0;">
+    st.markdown("""
+<div style="border-left:6px solid #1f6feb;background:#eaf2ff;padding:14px 16px;border-radius:8px;margin:12px 0 4px 0;">
   <b>안내</b><br/>
   💡 정책자금 승인 여부와 조건은 신용 점수나 매출뿐 아니라 <b>사업계획서·기술력·대표자 상황</b> 등에 따라 달라질 수 있습니다.
   또한 <b>복수 자금 활용</b>, <b>시차를 둔 추가 신청</b> 등 운용 방식에 따라 결과가 달라질 수 있습니다.<br/><br/>
@@ -308,7 +303,15 @@ if submitted:
 </div>
 """, unsafe_allow_html=True)
 
-    # -------- 상담 신청 폼 : 제출만 하면 항상 노출 --------
+if submitted:
+    birth, err1 = build_date_or_error(int(birth_year), int(birth_month), int(birth_day), "대표자 생년월일")
+    biz_start, err2 = build_date_or_error(int(biz_year), int(biz_month), int(biz_day), "개업 연월일")
+    if err1: st.error(err1)
+    if err2: st.error(err2)
+    if not (err1 or err2):
+        show_results_and_notice(birth, biz_start)
+
+    # -------- 상담 신청 폼 --------
     st.markdown("### 📞 상담 신청하기")
     st.caption("정확한 심사 가능 여부와 맞춤 전략은 상담을 통해 확인할 수 있습니다.")
     with st.form("contact_form", clear_on_submit=True):
@@ -318,11 +321,25 @@ if submitted:
         submit_contact = st.form_submit_button("📩 상담 신청하기")
 
     if submit_contact:
+        st.write("🛠️ DEBUG 입력값:", {"name": name, "phone": phone, "memo": memo})
         if not name or not phone:
             st.error("이름과 연락처는 필수 입력입니다.")
         else:
-            append_contact_csv(name, phone, memo)
-            st.success("✅ 상담 신청이 접수되었습니다. 곧 연락드리겠습니다.")
+            try:
+                append_contact_xlsx(name, phone, memo)             # Excel 저장
+                st.session_state.contacts_buffer.append(
+                    {"이름": name, "연락처": phone, "메모": memo, "신청일": date.today().isoformat()}
+                )
+                df_now = load_contacts_df()
+                st.success("✅ 상담 신청이 접수되었습니다. 곧 연락드리겠습니다.")
+                st.markdown("#### ✅ 저장 확인 (최근 5건)")
+                st.dataframe(df_now.tail(5), use_container_width=True)
+            except Exception as e:
+                st.error(f"저장 중 오류 발생: {e}")
+
+    if st.session_state.contacts_buffer:
+        st.markdown("#### 🗒️ 이번 세션에서 접수된 내역(미리보기)")
+        st.dataframe(pd.DataFrame(st.session_state.contacts_buffer), use_container_width=True)
 
     st.markdown("---")
     st.subheader("📞 상담 및 문의 채널")
@@ -330,35 +347,61 @@ if submitted:
     st.markdown(f"- 블로그: [광명파트너스 네이버 블로그]({BLOG_URL})")
 
 # =========================
-# 🔒 관리자 전용 페이지 (앱 내 조회)
+# 🔒 관리자 전용 (조회/다운로드/테스트)
 # =========================
 st.markdown("---")
 with st.expander("🔒 관리자 전용 (상담 신청 내역 조회/다운로드)"):
     pin = st.text_input("관리자 PIN을 입력하세요", type="password")
     if pin == ADMIN_PIN:
         st.success("관리자 인증 완료 ✅")
-        df = load_contacts_df()
-        st.markdown("#### 상담 신청 내역")
-        st.dataframe(df, use_container_width=True)
 
-        # 다운로드 버튼
-        csv_bytes = df.to_csv(index=False, encoding="utf-8-sig").encode("utf-8-sig")
-        st.download_button(
-            label="⬇️ CSV 다운로드",
-            data=csv_bytes,
-            file_name="contacts.csv",
-            mime="text/csv"
-        )
+        left, mid, right = st.columns(3)
+        with left:
+            st.caption(f"저장 파일: `{CONTACTS_XLSX.name}`")
+            if st.button("🔄 새로고침"):
+                st.rerun()
+        with mid:
+            st.write("파일 존재:", CONTACTS_XLSX.exists())
+        with right:
+            st.write("파일 크기(바이트):", CONTACTS_XLSX.stat().st_size if CONTACTS_XLSX.exists() else 0)
 
-        # (선택) 위험 방지용 삭제 옵션 - 기본 주석
-        # with st.popover("⚠️ 데이터 비우기(위험)"):
-        #     confirm = st.checkbox("정말로 contacts.csv를 초기화합니다.")
-        #     if confirm and st.button("초기화 실행"):
-        #         open(CONTACTS_CSV, "w", encoding="utf-8").write("")
-        #         st.warning("CSV가 초기화되었습니다. 새로고침 후 반영됩니다.")
+        # 테스트 행 추가
+        st.markdown("##### 🔧 저장 테스트")
+        c1, c2 = st.columns([1,1])
+        with c1:
+            if st.button("➕ 테스트 행 추가(홍길동/010-0000-0000)"):
+                try:
+                    append_contact_xlsx("홍길동", "010-0000-0000", "관리자 테스트")
+                    st.success("테스트 행을 저장했습니다. 표에서 확인하세요.")
+                except Exception as e:
+                    st.error(f"저장 실패: {e}")
+        with c2:
+            if CONTACTS_XLSX.exists():
+                try:
+                    raw_df = pd.read_excel(CONTACTS_XLSX, engine="openpyxl")
+                    st.code(raw_df.to_csv(index=False), language="csv")
+                except Exception as e:
+                    st.error(f"파일 읽기 오류: {e}")
+
+        # 표 & 다운로드
+        df_all = load_contacts_df()
+        st.markdown("#### 상담 신청 내역 (전체)")
+        st.dataframe(df_all, use_container_width=True)
+
+        # Excel 다운로드(메모리)
+        if not df_all.empty:
+            from io import BytesIO
+            buffer = BytesIO()
+            with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+                df_all.to_excel(writer, index=False, sheet_name="상담신청내역")
+            st.download_button(
+                "⬇️ Excel 다운로드",
+                data=buffer.getvalue(),
+                file_name="contacts.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
     elif pin:
         st.error("PIN이 올바르지 않습니다.")
 
 # 푸터
 st.caption(f"ⓒ {date.today().year} {BRAND}")
-
