@@ -17,7 +17,7 @@ BLOG_URL = "https://blog.naver.com/kwangmyung80"
 CONTACT_PHONE = "1877-2312"  # 대표번호
 
 # 🔒 관리자 PIN (원하는 숫자로 변경하세요)
-ADMIN_PIN = "1234"
+ADMIN_PIN = "0913"
 
 # =========================
 # 스타일
@@ -361,3 +361,4 @@ with st.expander("🔒 관리자 전용 (상담 신청 내역 조회/다운로�
 
 # 푸터
 st.caption(f"ⓒ {date.today().year} {BRAND}")
+
