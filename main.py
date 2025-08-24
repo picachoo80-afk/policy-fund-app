@@ -15,7 +15,7 @@ BRAND = "광명파트너스"
 BLOG_URL = "https://blog.naver.com/kwangmyung80"
 CONTACT_PHONE = "1877-2312"
 KAKAO_LINK = "https://open.kakao.com/o/shxgLPsh"
-ADMIN_PIN = "0913"
+ADMIN_PIN = "070913"
 
 # ========= 스타일 =========
 st.markdown("""
@@ -387,3 +387,4 @@ with st.expander("🔒 관리자 전용 (상담 신청 내역 조회/다운로�
 
 # ========= 푸터 =========
 st.caption(f"ⓒ {date.today().year} {BRAND}")
+
