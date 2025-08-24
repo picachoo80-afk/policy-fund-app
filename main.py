@@ -1,7 +1,7 @@
 # main.py
 import streamlit as st
 from datetime import date
-import csv, os
+import csv
 import pandas as pd
 from pathlib import Path
 
@@ -11,6 +11,7 @@ st.set_page_config(
     page_icon="📊",
     layout="wide",
 )
+
 BRAND = "광명파트너스"
 BLOG_URL = "https://blog.naver.com/kwangmyung80"
 CONTACT_PHONE = "1877-2312"
@@ -75,7 +76,6 @@ st.markdown(
 st.markdown("---")
 
 # ========= 유틸 =========
-from datetime import date
 def years_between(d: date, ref: date | None = None) -> float:
     if ref is None: ref = date.today()
     return (ref - d).days / 365.25
@@ -85,14 +85,27 @@ def months_between(d: date, ref: date | None = None) -> float:
     return (ref.year - d.year) * 12 + (ref.month - d.month) + (ref.day - d.day) / 30
 
 def fmt_money(n: int) -> str:
-    try: return f"{int(n):,}"
-    except: return str(n)
+    try:
+        return f"{int(n):,}"
+    except:
+        return str(n)
 
 def build_date_or_error(year: int, month: int, day: int, label: str):
     try:
         return date(year, month, day), None
     except Exception:
         return None, f"{label}: 올바르지 않은 날짜입니다."
+
+# ✅ 직원 수 제한 (요청 반영)
+def employee_cap_ok(sector: str, emp: int) -> bool:
+    """
+    제조업, 건설업, 운송업(=운수·창고·통신업), 광업: 10인 미만
+    그 외 업종: 5인 미만
+    """
+    ten_cap_sectors = {"제조업", "건설업", "운수·창고·통신업", "광업"}
+    if sector in ten_cap_sectors:
+        return emp < 10
+    return emp < 5
 
 # ========= 입력 폼 =========
 with st.form("basic_form", clear_on_submit=False):
@@ -130,10 +143,30 @@ with st.form("basic_form", clear_on_submit=False):
     assets = st.number_input("자산 총액 (부동산·주식·자동차·임차보증금 등)", 0, step=1_000_000, value=0)
     st.caption(f"입력값: {fmt_money(assets)} 원")
 
+    # 업종=선택 / 업태=자유입력 (요청 반영)
     t1, t2, t3 = st.columns(3)
-    with t1: biz_sector = st.text_input("사업자등록증상 **업종** (예: 음식점업)", "음식점업")
-    with t2: biz_item   = st.text_input("사업자등록증상 **업태** (예: 한식)", "한식")
-    with t3: employees  = st.number_input("4대보험 직원 수", 0, step=1, value=0)
+    with t1:
+        biz_sector = st.selectbox(
+            "사업자등록증상 **업종**",
+            [
+                "부동산 임대업",      # 상가, 건물, 오피스텔 임대 등
+                "서비스업",          # 미용실, 세탁, 피트니스, 학원, 컨설팅, 창업지원 등
+                "소매업",            # 편의점, 의류매장, 문구점, 식자재 마트 등
+                "음식점업",          # 식당, 카페, 치킨집, 분식점 등
+                "도매업",            # 식자재 유통, 중간 유통, 창고형 판매 등
+                "제조업",            # 가공식품, 공예품, 수제비누·화장품, 가구·목공 등
+                "운수·창고·통신업",   # 퀵서비스, 택배, 창고대여, 통신판매업 등
+                "건설업",            # 인테리어, 설비, 전기·소방공사 등
+                "광업",              # (요청 반영: 직원수 규칙 대상)
+                "기타업종",          # 숙박업, 교육업, 예술/여가 관련 등
+            ],
+            index=2,
+            help="업종은 목록에서 선택, 업태는 아래 칸에 직접 입력합니다."
+        )
+    with t2:
+        biz_item = st.text_input("사업자등록증상 **업태** (예: 한식 / 컨설팅 / 통신판매업 등)", "")
+    with t3:
+        employees = st.number_input("4대보험 직원 수", 0, step=1, value=0)
 
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -158,7 +191,7 @@ with st.form("basic_form", clear_on_submit=False):
     with b3: flag_social     = st.checkbox("사회적경제기업")
     with b4: flag_academy    = st.checkbox("신사업창업사관학교 수료(1년 이내)")
 
-    # ✅ 재도전특별자금 조건(신규)
+    # 재도전특별자금
     st.markdown("**재도전특별자금 해당 여부**")
     c1, c2 = st.columns(2)
     with c1:
@@ -166,6 +199,7 @@ with st.form("basic_form", clear_on_submit=False):
     with c2:
         flag_debtrehab = st.checkbox("신용회복/채무조정 성실 이행 중 또는 이수")
 
+    # 일시적 경영애로 사유
     st.markdown("**일시적 경영애로 사유**")
     flag_distress = st.checkbox("매출 10% 이상 감소(또는 예외사유 증빙)")
 
@@ -196,8 +230,14 @@ def show_results_and_notice(birth, biz_start):
     biz_months = months_between(biz_start)
 
     results = []
-    # 최소 게이트
-    if (sales >= 10_000_000) and (credit_nice > 515) and (credit_kcb > 454) and (biz_months >= 3):
+    # 최소 게이트(요청 반영: 직원수 제한 포함)
+    if (
+        (sales >= 10_000_000)
+        and (credit_nice > 515)
+        and (credit_kcb > 454)
+        and (biz_months >= 3)
+        and employee_cap_ok(biz_sector, employees)
+    ):
         # 일반경영안정자금
         if (credit_nice >= 665) and (credit_kcb >= 630):
             results.append({
@@ -216,7 +256,7 @@ def show_results_and_notice(birth, biz_start):
                 "notes":"신용관리교육 필수. 세부 한도/조건은 심사에 따라 달라집니다.",
                 "link":"https://ols.sbiz.or.kr/"
             })
-        # 청년 전용 자금 (업력 전역 제약 없음, 전역 게이트만 충족)
+        # 청년 전용 자금
         if age <= 39 and (credit_nice >= 620 and credit_kcb >= 620):
             results.append({
                 "name":"청년 전용 자금(공고별)",
@@ -226,8 +266,10 @@ def show_results_and_notice(birth, biz_start):
                 "link":"https://www.kosmes.or.kr/"
             })
         # 혁신성장촉진자금
-        if any([flag_export, flag_growth10, flag_smart_factory, flag_strong_local, flag_postgrad,
-                flag_smart_tech, flag_baeknyeon, flag_social, flag_academy]):
+        if any([
+            flag_export, flag_growth10, flag_smart_factory, flag_strong_local, flag_postgrad,
+            flag_smart_tech, flag_baeknyeon, flag_social, flag_academy
+        ]):
             results.append({
                 "name":"혁신성장촉진자금",
                 "range":"운전 2억원 / 시설 10억원 (예시)",
@@ -235,7 +277,7 @@ def show_results_and_notice(birth, biz_start):
                 "notes":"혁신형/일반형 증빙 필요. 금리는 유형·공고에 따라 달라질 수 있습니다.",
                 "link":"https://www.sbiz24.kr/"
             })
-        # 일시적 경영애로자금
+        # 일시적 경영애로자금 (매출 상한 1억 400만원)
         if flag_distress and (sales <= 104_000_000):
             results.append({
                 "name":"일시적 경영애로자금",
@@ -244,8 +286,7 @@ def show_results_and_notice(birth, biz_start):
                 "notes":"매출감소 등 일시적 애로 사유를 증빙해야 합니다.",
                 "link":"https://ols.sbiz.or.kr/"
             })
-        # ✅ 재도전특별자금 (신규 로직)
-        # - 조건: (재창업 경험 있음 OR 신용회복·채무조정 성실 이행)
+        # 재도전특별자금 (둘 중 하나 충족)
         if (flag_restartup or flag_debtrehab):
             results.append({
                 "name":"재도전특별자금",
@@ -271,9 +312,18 @@ def show_results_and_notice(birth, biz_start):
             </div>""", unsafe_allow_html=True)
     else:
         msg=[]
-        if sales < 10_000_000: msg.append("연 매출 1,000만원 미만")
-        if credit_nice <= 515 or credit_kcb <= 454: msg.append("신용점수 낮음(NICE 515 이하 또는 KCB 454 이하)")
-        if months_between(biz_start) < 3: msg.append("개업 3개월 미만")
+        if sales < 10_000_000:
+            msg.append("연 매출 1,000만원 미만")
+        if credit_nice <= 515 or credit_kcb <= 454:
+            msg.append("신용점수 낮음(NICE 515 이하 또는 KCB 454 이하)")
+        if months_between(biz_start) < 3:
+            msg.append("개업 3개월 미만")
+        # 직원 수 제한 사유 추가
+        if not employee_cap_ok(biz_sector, employees):
+            if biz_sector in {"제조업", "건설업", "운수·창고·통신업", "광업"} and employees >= 10:
+                msg.append("해당 업종(제조/건설/운송/광업) 4대보험 직원 10인 이상")
+            elif employees >= 5:
+                msg.append("4대보험 직원 5인 이상")
         st.info("현재 조건에 맞는 자금을 찾지 못했습니다." + (" ("+" · ".join(msg)+")" if msg else ""))
 
     # 안내 박스
@@ -294,7 +344,7 @@ if submitted:
     if not (e1 or e2):
         show_results_and_notice(birth, start)
 
-# ========= 상담 신청(개인정보 동의: 체크박스 '폼 바깥') =========
+# ========= 상담 신청(개인정보 동의) =========
 st.markdown("### 📞 상담 신청하기")
 st.caption("정확한 심사 가능 여부와 맞춤 전략은 상담을 통해 확인할 수 있습니다.")
 
@@ -309,7 +359,6 @@ with st.form("contact_form", clear_on_submit=True):
     name = st.text_input("이름")
     phone = st.text_input("연락처 (휴대폰 번호)")
     memo = st.text_area("추가 메모 (선택)")
-
     submit_contact = st.form_submit_button("📩 상담 신청하기", disabled=not agree)
 
 if submit_contact:
@@ -387,4 +436,5 @@ with st.expander("🔒 관리자 전용 (상담 신청 내역 조회/다운로�
 
 # ========= 푸터 =========
 st.caption(f"ⓒ {date.today().year} {BRAND}")
+
 
