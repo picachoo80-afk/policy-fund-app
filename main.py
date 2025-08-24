@@ -1,24 +1,23 @@
 # main.py
 import streamlit as st
 from datetime import date
-import csv
+import csv, os
 import pandas as pd
 from pathlib import Path
 
-# ============== 기본 설정 ==============
+# ========= 기본 설정 =========
 st.set_page_config(
     page_title="광명파트너스 | 정책자금 맞춤 도우미",
     page_icon="📊",
     layout="wide",
 )
-
 BRAND = "광명파트너스"
 BLOG_URL = "https://blog.naver.com/kwangmyung80"
 CONTACT_PHONE = "1877-2312"
-KAKAO_LINK = "https://open.kakao.com/o/shxgLPsh"  # 💬 카카오채널
-ADMIN_PIN = "0913"  # 🔒 관리자 PIN
+KAKAO_LINK = "https://open.kakao.com/o/shxgLPsh"
+ADMIN_PIN = "0913"
 
-# ============== 스타일 ==============
+# ========= 스타일 =========
 st.markdown("""
 <style>
 .block-container {padding-top: 1.25rem; padding-bottom: 2rem;}
@@ -32,49 +31,9 @@ hr.soft {border:none; border-top:1px dashed #e5e7eb; margin:10px 0;}
 </style>
 """, unsafe_allow_html=True)
 
-# ============== 파일 경로 ==============
+# ========= 경로/파일 =========
 APP_DIR = Path(__file__).parent if "__file__" in globals() else Path(".")
 CONTACTS_CSV = APP_DIR / "contacts.csv"
-
-# ============== 사이드바 ==============
-with st.sidebar:
-    st.markdown("### 🧭 사용 방법")
-    st.markdown("- ① 기본정보 입력 → ② 추가 체크 → ③ **제출**")
-    st.markdown("- 결과 하단의 **안내문구**와 **상담 신청**을 확인하세요.")
-    st.markdown("---")
-    st.markdown("### ☎ 상담/문의")
-    st.markdown('<div class="sidebar-links">', unsafe_allow_html=True)
-    st.markdown(f"- 대표번호: **{CONTACT_PHONE}**")
-    st.markdown(f"- 블로그: [광명파트너스  블로그]({BLOG_URL})")
-    st.markdown(f"- 카카오채널: [바로 연결하기]({KAKAO_LINK})")  # ← 사이드바 추가
-    st.markdown('</div>', unsafe_allow_html=True)
-
-# ============== 헤더 ==============
-st.markdown("## 📊 광명파트너스 – 정책자금 맞춤 도우미")
-st.caption("정부 정책자금 진단 및 상담 연계 서비스")
-st.markdown(
-    f"📞 대표번호: **{CONTACT_PHONE}**  ·  🔗 블로그: [바로가기]({BLOG_URL})  ·  💬 카카오채널: [연결]({KAKAO_LINK})"
-)  # ← 헤더 라인에도 노출
-st.markdown("---")
-
-# ============== 유틸 ==============
-def years_between(d: date, ref: date | None = None) -> float:
-    if ref is None: ref = date.today()
-    return (ref - d).days / 365.25
-
-def months_between(d: date, ref: date | None = None) -> float:
-    if ref is None: ref = date.today()
-    return (ref.year - d.year) * 12 + (ref.month - d.month) + (ref.day - d.day) / 30
-
-def fmt_money(n: int) -> str:
-    try: return f"{int(n):,}"
-    except: return str(n)
-
-def build_date_or_error(year: int, month: int, day: int, label: str):
-    try:
-        return date(year, month, day), None
-    except Exception:
-        return None, f"{label}: 올바르지 않은 날짜입니다."
 
 def append_contact_csv(name, phone, memo):
     CONTACTS_CSV.parent.mkdir(parents=True, exist_ok=True)
@@ -93,7 +52,49 @@ def load_contacts_df():
             return pd.read_csv(CONTACTS_CSV, encoding="cp949")
     return pd.DataFrame(columns=["이름", "연락처", "메모", "신청일"])
 
-# ============== 입력 폼 ==============
+# ========= 사이드바 =========
+with st.sidebar:
+    st.markdown("### 🧭 사용 방법")
+    st.markdown("- ① 기본정보 입력 → ② 추가 체크 → ③ 제출")
+    st.markdown("- 결과 하단 안내문구와 상담 신청을 확인하세요.")
+    st.markdown("---")
+    st.markdown("### ☎ 상담/문의")
+    st.markdown('<div class="sidebar-links">', unsafe_allow_html=True)
+    st.markdown(f"- 대표번호: **{CONTACT_PHONE}**")
+    st.markdown(f"- 블로그: [광명파트너스  블로그]({BLOG_URL})")
+    st.markdown(f"- 카카오채널: [바로 연결하기]({KAKAO_LINK})")
+    st.markdown('</div>', unsafe_allow_html=True)
+    st.caption("👉 상담은 무료이며, 실제 신청은 고객님 명의로만 진행됩니다.")
+
+# ========= 헤더 =========
+st.markdown("## 📊 광명파트너스 – 정책자금 맞춤 도우미")
+st.caption("정부 정책자금 진단 및 상담 연계 서비스")
+st.markdown(
+    f"📞 대표번호: **{CONTACT_PHONE}**  ·  🔗 블로그: [바로가기]({BLOG_URL})  ·  💬 카카오채널: [연결하기]({KAKAO_LINK})"
+)
+st.markdown("---")
+
+# ========= 유틸 =========
+from datetime import date
+def years_between(d: date, ref: date | None = None) -> float:
+    if ref is None: ref = date.today()
+    return (ref - d).days / 365.25
+
+def months_between(d: date, ref: date | None = None) -> float:
+    if ref is None: ref = date.today()
+    return (ref.year - d.year) * 12 + (ref.month - d.month) + (ref.day - d.day) / 30
+
+def fmt_money(n: int) -> str:
+    try: return f"{int(n):,}"
+    except: return str(n)
+
+def build_date_or_error(year: int, month: int, day: int, label: str):
+    try:
+        return date(year, month, day), None
+    except Exception:
+        return None, f"{label}: 올바르지 않은 날짜입니다."
+
+# ========= 입력 폼 =========
 with st.form("basic_form", clear_on_submit=False):
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.markdown("#### ① 기본정보")
@@ -137,7 +138,9 @@ with st.form("basic_form", clear_on_submit=False):
     st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.markdown("#### ② 추가 체크,해당사항 있을시")
+    st.markdown("#### ② 추가 체크")
+
+    st.markdown("**혁신성장촉진자금 - 혁신형 해당 여부**")
     a1, a2, a3 = st.columns(3)
     with a1:
         flag_export = st.checkbox("수출 실적 있음")
@@ -148,17 +151,29 @@ with st.form("basic_form", clear_on_submit=False):
     with a3:
         flag_postgrad = st.checkbox("졸업후보기업")
 
+    st.markdown("**혁신성장촉진자금 - 일반형 해당 여부**")
     b1, b2, b3, b4 = st.columns(4)
     with b1: flag_smart_tech = st.checkbox("스마트기술 활용")
     with b2: flag_baeknyeon  = st.checkbox("백년소공인/백년가게")
     with b3: flag_social     = st.checkbox("사회적경제기업")
     with b4: flag_academy    = st.checkbox("신사업창업사관학교 수료(1년 이내)")
 
+    # ✅ 재도전특별자금 조건(신규)
+    st.markdown("**재도전특별자금 해당 여부**")
+    c1, c2 = st.columns(2)
+    with c1:
+        flag_restartup = st.checkbox("재창업 경험 있음(폐업 후 재창업)")
+    with c2:
+        flag_debtrehab = st.checkbox("신용회복/채무조정 성실 이행 중 또는 이수")
+
+    st.markdown("**일시적 경영애로 사유**")
     flag_distress = st.checkbox("매출 10% 이상 감소(또는 예외사유 증빙)")
+
     submitted = st.form_submit_button("✅ ③ 제출하고 분석 결과 보기")
 
-# ============== 분석 출력 ==============
+# ========= 분석 출력 =========
 def show_results_and_notice(birth, biz_start):
+    # 입력 요약
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.markdown("#### 🧾 입력 요약")
     c1, c2, c3 = st.columns(3)
@@ -181,34 +196,66 @@ def show_results_and_notice(birth, biz_start):
     biz_months = months_between(biz_start)
 
     results = []
+    # 최소 게이트
     if (sales >= 10_000_000) and (credit_nice > 515) and (credit_kcb > 454) and (biz_months >= 3):
+        # 일반경영안정자금
         if (credit_nice >= 665) and (credit_kcb >= 630):
-            results.append({"name":"일반경영안정자금","range":"2,000만원 ~ 7,000만원",
-                            "rate":"연 3.28% (기준 2.68% +0.6%p)",
-                            "notes":"은행 및 보증 조건에 따라 실금리는 달라질 수 있습니다.",
-                            "link":"https://ols.sbiz.or.kr/"})
+            results.append({
+                "name":"일반경영안정자금",
+                "range":"2,000만원 ~ 7,000만원",
+                "rate":"연 3.28% (기준 2.68% +0.6%p)",
+                "notes":"은행 및 보증 조건에 따라 실금리는 달라질 수 있습니다.",
+                "link":"https://ols.sbiz.or.kr/"
+            })
+        # 신용취약 소상공인자금
         if (515 <= credit_nice <= 839) or (515 <= credit_kcb <= 839):
-            results.append({"name":"신용취약 소상공인자금","range":"최대 3,000만원 (연 1회)",
-                            "rate":"연 4.28% (기준 2.68% +1.6%p)",
-                            "notes":"신용관리교육 필수. 세부 한도/조건은 심사에 따라 달라집니다.",
-                            "link":"https://ols.sbiz.or.kr/"})
+            results.append({
+                "name":"신용취약 소상공인자금",
+                "range":"최대 3,000만원 (연 1회)",
+                "rate":"연 4.28% (기준 2.68% +1.6%p)",
+                "notes":"신용관리교육 필수. 세부 한도/조건은 심사에 따라 달라집니다.",
+                "link":"https://ols.sbiz.or.kr/"
+            })
+        # 청년 전용 자금 (업력 전역 제약 없음, 전역 게이트만 충족)
         if age <= 39 and (credit_nice >= 620 and credit_kcb >= 620):
-            results.append({"name":"청년 전용 자금(공고별)","range":"공고별 한도 (예: 1~2억원)",
-                            "rate":"연 2.68% (기준 2.68% +0.0%p)",
-                            "notes":"세부요건·금리는 공고마다 상이합니다.",
-                            "link":"https://www.kosmes.or.kr/"})
+            results.append({
+                "name":"청년 전용 자금(공고별)",
+                "range":"공고별 한도 (예: 1~2억원)",
+                "rate":"연 2.68% (기준 2.68% +0.0%p)",
+                "notes":"세부요건·금리는 공고마다 상이합니다.",
+                "link":"https://www.kosmes.or.kr/"
+            })
+        # 혁신성장촉진자금
         if any([flag_export, flag_growth10, flag_smart_factory, flag_strong_local, flag_postgrad,
                 flag_smart_tech, flag_baeknyeon, flag_social, flag_academy]):
-            results.append({"name":"혁신성장촉진자금","range":"운전 2억원 / 시설 10억원 (예시)",
-                            "rate":"연 3.08% (기준 2.68% +0.4%p)",
-                            "notes":"혁신형/일반형 증빙 필요. 금리는 유형·공고에 따라 달라질 수 있습니다.",
-                            "link":"https://www.sbiz24.kr/"})
-        if flag_distress:
-            results.append({"name":"일시적 경영애로자금","range":"최대 7,000만원",
-                            "rate":"연 2.68% (기준 2.68% +0.0%p)",
-                            "notes":"매출감소 등 일시적 애로 사유가 필요.",
-                            "link":"https://ols.sbiz.or.kr/"})
+            results.append({
+                "name":"혁신성장촉진자금",
+                "range":"운전 2억원 / 시설 10억원 (예시)",
+                "rate":"연 3.08% (기준 2.68% +0.4%p)",
+                "notes":"혁신형/일반형 증빙 필요. 금리는 유형·공고에 따라 달라질 수 있습니다.",
+                "link":"https://www.sbiz24.kr/"
+            })
+        # 일시적 경영애로자금
+        if flag_distress and (sales <= 104_000_000):
+            results.append({
+                "name":"일시적 경영애로자금",
+                "range":"최대 7,000만원",
+                "rate":"연 2.68% (기준 2.68% +0.0%p)",
+                "notes":"매출감소 등 일시적 애로 사유를 증빙해야 합니다.",
+                "link":"https://ols.sbiz.or.kr/"
+            })
+        # ✅ 재도전특별자금 (신규 로직)
+        # - 조건: (재창업 경험 있음 OR 신용회복·채무조정 성실 이행)
+        if (flag_restartup or flag_debtrehab):
+            results.append({
+                "name":"재도전특별자금",
+                "range":"희망형 최대 1억원 / 일반형 최대 7천만원",
+                "rate":"희망형 연 3.28% (기준 2.68% +0.6%p) / 일반형 연 4.28% (기준 2.68% +1.6%p)",
+                "notes":"재창업·채무조정 성실 이행 등 재도약 소상공인 대상. 5년(2년 거치+3년 분할). 우대금리 최대 0.6%p 감면.",
+                "link":"https://ols.sbiz.or.kr/"
+            })
 
+    # 출력
     if results:
         for r in results:
             st.markdown(f"""<div class="result-card">
@@ -229,6 +276,7 @@ def show_results_and_notice(birth, biz_start):
         if months_between(biz_start) < 3: msg.append("개업 3개월 미만")
         st.info("현재 조건에 맞는 자금을 찾지 못했습니다." + (" ("+" · ".join(msg)+")" if msg else ""))
 
+    # 안내 박스
     st.markdown("""
 <div style="border-left:6px solid #1f6feb;background:#eaf2ff;padding:14px 16px;border-radius:8px;margin:12px 0 4px 0;">
 <b>안내</b><br/>
@@ -246,13 +294,10 @@ if submitted:
     if not (e1 or e2):
         show_results_and_notice(birth, start)
 
-# ============== 상담 신청(공개 화면: 내역 미표시) ==============
-
-
+# ========= 상담 신청(개인정보 동의: 체크박스 '폼 바깥') =========
 st.markdown("### 📞 상담 신청하기")
 st.caption("정확한 심사 가능 여부와 맞춤 전략은 상담을 통해 확인할 수 있습니다.")
 
-# ✅ 동의 체크박스는 '폼 바깥'에 둡니다 (즉시 렌더링 반영)
 agree = st.checkbox("✅ 개인정보 수집·이용에 동의합니다.", help=(
     "수집 항목: 이름, 연락처, 메모(선택)\n"
     "수집 목적: 정책자금 상담 신청 접수 및 연락\n"
@@ -265,13 +310,8 @@ with st.form("contact_form", clear_on_submit=True):
     phone = st.text_input("연락처 (휴대폰 번호)")
     memo = st.text_area("추가 메모 (선택)")
 
-    # 버튼은 동의 여부에 따라 활성/비활성 (동의 체크는 폼 바깥이라 즉시 반영됨)
-    submit_contact = st.form_submit_button(
-        "📩 상담 신청하기",
-        disabled=not agree
-    )
+    submit_contact = st.form_submit_button("📩 상담 신청하기", disabled=not agree)
 
-# 서버측 안전망 (한 번 더 검증)
 if submit_contact:
     if not agree:
         st.error("개인정보 수집·이용 동의가 필요합니다.")
@@ -280,27 +320,21 @@ if submit_contact:
     else:
         append_contact_csv(name, phone, memo)
         st.success("✅ 상담 신청이 접수되었습니다. 담당자 확인 후 빠르게 연락드리겠습니다.")
+
+# ========= 하단 연락처 =========
 st.markdown("---")
 st.subheader("📞 상담 및 문의 채널")
 st.markdown(f"- 대표번호: **{CONTACT_PHONE}**")
 st.markdown(f"- 블로그: [광명파트너스  블로그]({BLOG_URL})")
-st.markdown(f"- 카카오채널: [바로 연결하기]({KAKAO_LINK})")  # ← 하단 섹션에도 추가
+st.markdown(f"- 카카오채널: [바로 연결하기]({KAKAO_LINK})")
 
-# ============== 🔒 관리자 전용 (조회/선택삭제/초기화/다운로드) ==============
+# ========= 관리자 전용(조회/선택삭제/초기화/다운로드) =========
 st.markdown("---")
 with st.expander("🔒 관리자 전용 (상담 신청 내역 조회/다운로드/삭제)"):
     pin = st.text_input("관리자 PIN을 입력하세요", type="password")
     if pin == ADMIN_PIN:
         st.success("관리자 인증 완료 ✅")
         st.caption(f"저장 파일 경로: `{CONTACTS_CSV}`")
-
-        cols = st.columns([1,1,1])
-        with cols[0]:
-            if st.button("🔄 새로고침"): st.rerun()
-        with cols[1]:
-            st.write("파일 존재:", CONTACTS_CSV.exists())
-        with cols[2]:
-            if CONTACTS_CSV.exists(): st.write("크기(바이트):", CONTACTS_CSV.stat().st_size)
 
         df = load_contacts_df()
         if df.empty:
@@ -323,11 +357,13 @@ with st.expander("🔒 관리자 전용 (상담 신청 내역 조회/다운로�
             )
             to_delete = edited[edited["선택"] == True].drop(columns=["선택"])
 
-            d1, d2, _ = st.columns([1,1,6])
+            d1, d2, d3 = st.columns([1,1,6])
             with d1:
                 del_btn = st.button(f"🗑️ 선택 행 삭제 ( {len(to_delete)} 건 )", type="primary", disabled=to_delete.empty)
             with d2:
                 wipe_btn = st.button("🧹 전체 삭제(초기화)")
+            with d3:
+                refresh_btn = st.button("🔄 새로고침")
 
             if del_btn and not to_delete.empty:
                 merged = df.merge(to_delete, how="left", indicator=True)
@@ -341,10 +377,13 @@ with st.expander("🔒 관리자 전용 (상담 신청 내역 조회/다운로�
                 st.success("✅ 모든 상담 신청 내역을 삭제했습니다.")
                 st.rerun()
 
+            if refresh_btn:
+                st.rerun()
+
             csv_bytes = df.to_csv(index=False, encoding="utf-8-sig").encode("utf-8-sig")
             st.download_button("⬇️ CSV 다운로드", data=csv_bytes, file_name="contacts.csv", mime="text/csv")
     elif pin:
         st.error("PIN이 올바르지 않습니다.")
 
-# ============== 푸터 ==============
+# ========= 푸터 =========
 st.caption(f"ⓒ {date.today().year} {BRAND}")
